@@ -9,6 +9,7 @@
 #include <NimBLEDevice.h>
 #include <ArduinoJson.h>
 #include "Preferences.h"
+#include "Renderer.cpp"
 
 static uint8_t Image_Flag = 0;
 
@@ -52,6 +53,7 @@ uint32_t displayed_password;
 uint16_t bgColor = WHITE;
 uint16_t fgColor = BLACK;
 bool showDirections = false;
+Renderer renderer;
 
 class ServerCallbacks : public NimBLEServerCallbacks
 {
@@ -240,48 +242,37 @@ bool initScreen()
     }
     Serial.println("FT3168 initialization successfully");
 
-    gfx->begin(80000000);
-    gfx->fillScreen(WHITE);
-
     uint8_t brightnessPref = prefs.getUChar("brightness", 255);
-    Serial.println(brightnessPref);
-    for (int i = 0; i <= brightnessPref; i++)
-    {
-        gfx->Display_Brightness(i);
-        delay(3);
-    }
-    Serial.printf("ID: %#X \n\n", (int32_t)FT3168->IIC_Device_ID());
-    delay(1000);
 
-    gfx->setFont(&FreeSansBold24pt7b);
-    gfx->setTextSize(3);
+    renderer.init(Renderer::ColorTheme::light, brightnessPref, 3);
+    renderer.draw(Renderer::Sector::lower_sector_right, " mph");
 
     // Get bounding box for " mph"
-    gfx->getTextBounds(" mph", 0, 0, &mphX, &mphY, &mphW, &mphH);
+    renderer.gfx->getTextBounds(" mph", 0, 0, &mphX, &mphY, &mphW, &mphH);
 
     // Position "mph" near vertical center bottom
     mphX = (LCD_WIDTH - mphW) / 2;
     mphY = (LCD_HEIGHT + mphH) / 2 + 10;
 
     // Draw "mph" label once
-    gfx->setTextColor(BLACK);
-    gfx->setCursor(mphX, mphY);
-    gfx->print(" mph");
+    // gfx->setTextColor(BLACK);
+    // gfx->setCursor(mphX, mphY);
+    // gfx->print(" mph");
 
     // Measure size of a single digit
-    int16_t dummyX, dummyY;
-    gfx->getTextBounds("0", 0, 0, &dummyX, &dummyY, &digitW, &digitH);
+    // int16_t dummyX, dummyY;
+    // gfx->getTextBounds("0", 0, 0, &dummyX, &dummyY, &digitW, &digitH);
 
-    // Digit Y position
-    digitY = mphY - digitH - 10;
+    // // Digit Y position
+    // digitY = mphY - digitH - 10;
 
-    // Calculate X positions of each digit (centered)
-    int totalWidth = 3 * digitW;
-    int startX = (LCD_WIDTH - totalWidth) / 2;
-    for (int i = 0; i < 3; i++)
-    {
-        digitX[i] = startX + i * digitW;
-    }
+    // // Calculate X positions of each digit (centered)
+    // int totalWidth = 3 * digitW;
+    // int startX = (LCD_WIDTH - totalWidth) / 2;
+    // for (int i = 0; i < 3; i++)
+    // {
+    //     digitX[i] = startX + i * digitW;
+    // }
 
     return true;
 }
@@ -297,7 +288,7 @@ void setup()
 
     for (size_t i = 0; i < 99; i++)
     {
-        drawSpeedDigits(i);
+        renderer.draw(Renderer::Sector::lower_sector_center, i);
     }
 }
 
@@ -330,7 +321,7 @@ void drawSpeedDigits(int speed)
 
 int brightness = 255;
 TinyGPSPlus gps;
-const int gestureThreshold = 6;
+const int gestureThreshold = 10;
 bool firstLoop = true;
 
 // TODO: Must clean up this code, make a screen matrix and wrap write functions to make sure data doesn't overlap or look bad
@@ -353,54 +344,50 @@ void loop()
     // Read touch input
     while (FT3168->IIC_Read_Device_Value(FT3168->Arduino_IIC_Touch::Value_Information::TOUCH_FINGER_NUMBER) == 1)
     {
-        if (i == 1)
-        {
-            startingY = FT3168->IIC_Read_Device_Value(FT3168->Arduino_IIC_Touch::Value_Information::TOUCH_COORDINATE_Y);
-        }
-        if (i > gestureThreshold)
-        {
-            int currentY = FT3168->IIC_Read_Device_Value(FT3168->Arduino_IIC_Touch::Value_Information::TOUCH_COORDINATE_Y);
-            int deltaY = startingY - currentY;
+        // if (i == 1)
+        // {
+        //     startingY = FT3168->IIC_Read_Device_Value(FT3168->Arduino_IIC_Touch::Value_Information::TOUCH_COORDINATE_Y);
+        // }
+        // if (i > gestureThreshold)
+        // {
+        //     int currentY = FT3168->IIC_Read_Device_Value(FT3168->Arduino_IIC_Touch::Value_Information::TOUCH_COORDINATE_Y);
+        //     int deltaY = startingY - currentY;
 
-            brightness += deltaY;
+        //     brightness += deltaY;
 
-            if (brightness > 255)
-                brightness = 255;
+        //     if (brightness > 255)
+        //         brightness = 255;
 
-            if (brightness < 20)
-                brightness = 20;
+        //     if (brightness < 20)
+        //         brightness = 20;
 
-            gfx->Display_Brightness(brightness);
-            gfx->setCursor(LCD_WIDTH / 2 + 30, LCD_HEIGHT - 50);
-            gfx->setTextSize(1);
-            gfx->print(brightness);
+        //     gfx->Display_Brightness(brightness);
+        //     gfx->setCursor(LCD_WIDTH / 2 + 30, LCD_HEIGHT - 50);
+        //     gfx->setTextSize(1);
+        //     gfx->print(brightness);
 
-            startingY = currentY;
-            clearBrightnessText = true;
-            gfx->fillRect(LCD_WIDTH / 2, LCD_HEIGHT - 100, 150, 100, bgColor);
-        }
+        //     startingY = currentY;
+        //     clearBrightnessText = true;
+        //     gfx->fillRect(LCD_WIDTH / 2, LCD_HEIGHT - 100, 150, 100, bgColor);
+        // }
+
+        // After 10 seconds put in maintence mode and enable new BLE endpoint for app to upload new bin
         i++;
-        delay(50);
+        delay(25);
     }
 
     if (i < gestureThreshold && i > 2)
     {
         nightMode = !nightMode;
-        bgColor = nightMode ? BLACK : WHITE;
-        fgColor = nightMode ? WHITE : BLACK;
-        gfx->fillScreen(bgColor);
-        gfx->setTextColor(fgColor);
-        gfx->setCursor(mphX, mphY);
-        gfx->setTextSize(3);
-        gfx->print(" mph");
-        drawSpeedDigits(speed);
+        renderer.setTheme(nightMode ? Renderer::ColorTheme::dark : Renderer::ColorTheme::light);
+        // renderer.draw(Renderer::Sector::center_sector, speed);
+        // renderer.draw(Renderer::Sector::lower_sector_center, " mph");
     }
 
     if (clearBrightnessText)
     {
         prefs.putUChar("brightness", brightness);
-        gfx->fillRect(LCD_WIDTH / 2, LCD_HEIGHT - 100, 150, 100, bgColor);
-        gfx->setTextSize(3);
+        renderer.forceReRender();
     }
 
     if (!showDirections)
